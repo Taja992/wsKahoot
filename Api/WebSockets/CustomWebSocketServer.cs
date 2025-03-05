@@ -28,19 +28,31 @@ public class CustomWebSocketServer(IConnectionManager manager, ILogger<CustomWeb
             socket.OnClose = () => manager.OnClose(socket, id);
             socket.OnMessage = message =>
             {
+                Console.WriteLine($"Received message: {message}");
                 Task.Run(async () =>
                 {
                     try
                     {
+                        Console.WriteLine("About to call event handler");
                         await app.CallEventHandler(socket, message);
+                        Console.WriteLine("Event handler completed");
                     }
                     catch (Exception e)
                     {
+                        Console.WriteLine($"Error in event handler: {e.Message}");
+                        Console.WriteLine($"Stack trace: {e.StackTrace}");
                         logger.LogError(e, "Error while handling message");
-                        socket.SendDto(new ServerSendsErrorMessageDto
+                        try
                         {
-                            Error = e.Message
-                        });
+                            socket.SendDto(new ServerSendsErrorMessageDto
+                            {
+                                Error = e.Message
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error sending error message: {ex.Message}");
+                        }
                     }
                 });
             };

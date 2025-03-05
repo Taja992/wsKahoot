@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Api.Documentation;
+using Api.EventHandlers;
 using Api.Utilities;
 using Api.WebSockets;
 using EFScaffold;
@@ -33,6 +34,8 @@ public class Program
         builder.Services.AddSingleton<IGameTimeProvider, GameTimeProvider>();
         builder.Services.AddSingleton<IConnectionManager, DictionaryConnectionManager>();
         builder.Services.AddSingleton<CustomWebSocketServer>();
+
+
         builder.Services.InjectEventHandlers(Assembly.GetExecutingAssembly());
         
         builder.Services.AddEndpointsApiExplorer();

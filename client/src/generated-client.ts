@@ -23,6 +23,47 @@ export interface ServerPutsClientInLobbyAndBroadcastsToEveryoneDto extends BaseD
     allClientIds?: string[];
 }
 
+export interface AdminRequestDto extends BaseDto {
+    password?: string;
+}
+
+export interface AdminResponseDto extends BaseDto {
+    isAdmin?: boolean;
+    message?: string;
+}
+
+export interface AnswerSubmissionDto extends BaseDto {
+    questionId?: string;
+    selectedOption?: string;
+    timeRemaining?: number | undefined;
+}
+
+export interface AnswerResponseDto extends BaseDto {
+    isCorrect?: boolean;
+    score?: number;
+}
+
+export interface GameCompleteDto extends BaseDto {
+    players?: PlayerScoreDto[];
+}
+
+export interface PlayerScoreDto {
+    id?: string;
+    score?: number;
+}
+
+export interface GetGamesRequestDto extends BaseDto {
+}
+
+export interface GetGamesResponseDto extends BaseDto {
+    games?: GameDto[];
+}
+
+export interface GameDto {
+    id?: string;
+    name?: string;
+}
+
 export interface ServerConfirmsDto extends BaseDto {
     success?: boolean;
 }
@@ -31,12 +72,42 @@ export interface ServerSendsErrorMessageDto extends BaseDto {
     error?: string;
 }
 
+export interface StartGameRequestDto extends BaseDto {
+    gameId?: string;
+}
+
+export interface StartGameResponseDto extends BaseDto {
+    success?: boolean;
+    message?: string;
+}
+
+export interface QuestionDto extends BaseDto {
+    id?: string;
+    questionText?: string;
+    options?: QuestionOptionDto[];
+}
+
+export interface QuestionOptionDto {
+    optionText?: string;
+    isCorrect?: boolean;
+}
+
 /** Available eventType constants */
 export enum StringConstants {
     MemberHasLeftDto = "MemberHasLeftDto",
     ClientEntersLobbyDto = "ClientEntersLobbyDto",
     ServerPutsClientInLobbyAndBroadcastsToEveryoneDto = "ServerPutsClientInLobbyAndBroadcastsToEveryoneDto",
+    AdminRequestDto = "AdminRequestDto",
+    AdminResponseDto = "AdminResponseDto",
+    AnswerSubmissionDto = "AnswerSubmissionDto",
+    AnswerResponseDto = "AnswerResponseDto",
+    GameCompleteDto = "GameCompleteDto",
+    GetGamesRequestDto = "GetGamesRequestDto",
+    GetGamesResponseDto = "GetGamesResponseDto",
     ServerConfirmsDto = "ServerConfirmsDto",
     ServerSendsErrorMessageDto = "ServerSendsErrorMessageDto",
+    StartGameRequestDto = "StartGameRequestDto",
+    StartGameResponseDto = "StartGameResponseDto",
+    QuestionDto = "QuestionDto",
 }
 

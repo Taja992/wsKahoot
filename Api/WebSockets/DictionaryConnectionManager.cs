@@ -106,6 +106,12 @@ public class DictionaryConnectionManager(ILogger<DictionaryConnectionManager> lo
 
     public async Task OnOpen(IWebSocketConnection socket, string clientId)
     {
+        
+        if (string.IsNullOrEmpty(clientId))
+        {
+            clientId = Guid.NewGuid().ToString();
+        }
+        
         logger.LogDebug($"OnOpen called with clientId: {clientId} and socketId: {socket.ConnectionInfo.Id}");
 
         if (ConnectionIdToSocket.TryRemove(clientId, out var oldSocket))

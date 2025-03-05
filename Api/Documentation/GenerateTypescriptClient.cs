@@ -27,10 +27,32 @@ public static class GenerateTypescriptClient
         var generator = new TypeScriptClientGenerator(document, settings);
         var code = generator.GenerateFile();
 
-        var lines = code.Split(new[] { Environment.NewLine }, StringSplitOptions.None).ToList();
-        var startIndex = lines.FindIndex(l => l.Contains("export interface BaseDto"));
+        // Split lines using different line endings
+        var lines = code.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None).ToList();
+        
+        Console.WriteLine("Generated TypeScript Client Code:");
+        foreach (var line in lines)
+        {
+            Console.WriteLine(line);
+        }
+        
+        // Debugging output to check each line
+        for (int i = 0; i < lines.Count; i++)
+        {
+            Console.WriteLine($"Line {i}: '{lines[i]}'");
+        }
+
+        var startIndex = lines.FindIndex(l => l.Trim().Contains("export interface BaseDto {"));
+        Console.WriteLine("Start Index: " + startIndex);
         if (startIndex >= 0)
-            lines.RemoveRange(startIndex, 4); // Remove 3 lines (interface declaration and two properties)
+        {
+            Console.WriteLine("Found 'export interface BaseDto {' at line: " + startIndex);
+            lines.RemoveRange(startIndex, 4); // Remove 4 lines (interface declaration and two properties)
+        }
+        else
+        {
+            Console.WriteLine("Did not find 'export interface BaseDto {' in the generated code.");
+        }
 
         lines.Insert(0, "import { BaseDto } from 'ws-request-hook';");
 
