@@ -17,12 +17,13 @@ namespace Api.EventHandlers.Dtos
 
     public class GameCompleteDto : BaseDto
     {
-        public List<PlayerScoreDto> Players { get; set; }
+        public List<PlayerScoreDto> Players { get; set; } = new List<PlayerScoreDto>();
     }
 
     public class PlayerScoreDto
     {
         public string Id { get; set; }
+        public string Nickname { get; set; }
         public int Score { get; set; }
     }
 }

@@ -73,17 +73,91 @@ namespace Api.EventHandlers
             };
             socket.SendDto(startResponse);
 
-            await BroadcastQuestionsSequentially(questions);
+            await BroadcastQuestionsSequentially(questions, dto.GameId);
         }
 
-        private async Task BroadcastQuestionsSequentially(List<QuestionDto> questions)
+        private async Task BroadcastQuestionsSequentially(List<QuestionDto> questions, string gameId)
         {
             foreach (var question in questions)
             {
-                question.eventType = "QuestionDto";
-                await _connectionManager.BroadcastToTopic("lobby", question);
+                // Broadcasting preparation message with correct eventType
+                var prepareForQuestionDto = new PrepareForQuestionDto
+                {
+                    eventType = StringConstants.PrepareForQuestionDto,
+                    SecondsUntilQuestion = 3
+                };
+                
+                await _connectionManager.BroadcastToTopic($"game:{gameId}", prepareForQuestionDto);
+                
+                // Give clients time to prepare for the next question
+                await Task.Delay(3000); // 3 seconds preparation time
+                
+                // Broadcasting the question with correct eventType
+                question.eventType = StringConstants.QuestionDto;
+                await _connectionManager.BroadcastToTopic($"game:{gameId}", question);
+                
+                // Wait the full question time from GameTimeProvider (10 seconds)
                 await Task.Delay(_gameTimeProvider.MilliSeconds);
+                
+                // Send the time-up message with correct eventType
+                var questionTimeUpDto = new QuestionTimeUpDto
+                {
+                    eventType = StringConstants.QuestionTimeUpDto,
+                    QuestionId = question.Id
+                };
+                await _connectionManager.BroadcastToTopic($"game:{gameId}", questionTimeUpDto);
+                
+                // Mark the question as answered in the database
+                var dbQuestion = await _context.Questions.FindAsync(question.Id);
+                if (dbQuestion != null)
+                {
+                    dbQuestion.Answered = true;
+                    await _context.SaveChangesAsync();
+                }
+                
+                // Additional buffer for showing results before next question
+                await Task.Delay(3000);
             }
+
+            // After all questions, broadcast game complete with final scores
+            var playerScores = await GetPlayerScores(gameId);
+
+            var gameCompleteDto = new GameCompleteDto 
+            { 
+                eventType = StringConstants.GameCompleteDto,
+                Players = playerScores
+            };
+
+            await _connectionManager.BroadcastToTopic($"game:{gameId}", gameCompleteDto);
+        }
+        
+        private async Task<List<PlayerScoreDto>> GetPlayerScores(string gameId)
+        {
+            // Query to calculate player scores based on their correct answers
+            var playerScores = await _context.Players
+                .Where(p => p.GameId == gameId)
+                .Select(p => new
+                {
+                    PlayerId = p.Id,
+                    Nickname = p.Nickname,
+                    // Count correct answers (join player_answer with question_option where is_correct is true)
+                    CorrectAnswers = _context.PlayerAnswers
+                        .Where(a => a.PlayerId == p.Id)
+                        .Join(_context.QuestionOptions,
+                            answer => answer.SelectedOptionId,
+                            option => option.Id,
+                            (answer, option) => option.IsCorrect)
+                        .Count(isCorrect => isCorrect)
+                })
+                .ToListAsync();
+
+            // Convert to PlayerScoreDto format
+            return playerScores.Select(p => new PlayerScoreDto
+            {
+                Id = p.PlayerId,
+                Nickname = p.Nickname,
+                Score = p.CorrectAnswers
+            }).ToList();
         }
     }
 }

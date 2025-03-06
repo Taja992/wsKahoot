@@ -49,7 +49,12 @@ export interface GameCompleteDto extends BaseDto {
 
 export interface PlayerScoreDto {
     id?: string;
+    nickname?: string;
     score?: number;
+}
+
+export interface GameEndedDto extends BaseDto {
+    gameId?: string;
 }
 
 export interface GetGamesRequestDto extends BaseDto {
@@ -62,6 +67,29 @@ export interface GetGamesResponseDto extends BaseDto {
 export interface GameDto {
     id?: string;
     name?: string;
+}
+
+export interface JoinGameRequestDto extends BaseDto {
+    gameId?: string;
+    nickname?: string;
+}
+
+export interface JoinGameResponseDto extends BaseDto {
+    success?: boolean;
+    message?: string;
+}
+
+export interface GamePlayersUpdateDto extends BaseDto {
+    gameId?: string;
+    players?: GamePlayerDto[];
+}
+
+export interface GamePlayerDto {
+    id?: string;
+    nickname?: string;
+}
+
+export interface PlayerDisconnectDto extends BaseDto {
 }
 
 export interface ServerConfirmsDto extends BaseDto {
@@ -92,6 +120,14 @@ export interface QuestionOptionDto {
     isCorrect?: boolean;
 }
 
+export interface PrepareForQuestionDto extends BaseDto {
+    secondsUntilQuestion?: number;
+}
+
+export interface QuestionTimeUpDto extends BaseDto {
+    questionId?: string;
+}
+
 /** Available eventType constants */
 export enum StringConstants {
     MemberHasLeftDto = "MemberHasLeftDto",
@@ -102,12 +138,19 @@ export enum StringConstants {
     AnswerSubmissionDto = "AnswerSubmissionDto",
     AnswerResponseDto = "AnswerResponseDto",
     GameCompleteDto = "GameCompleteDto",
+    GameEndedDto = "GameEndedDto",
     GetGamesRequestDto = "GetGamesRequestDto",
     GetGamesResponseDto = "GetGamesResponseDto",
+    JoinGameRequestDto = "JoinGameRequestDto",
+    JoinGameResponseDto = "JoinGameResponseDto",
+    GamePlayersUpdateDto = "GamePlayersUpdateDto",
+    PlayerDisconnectDto = "PlayerDisconnectDto",
     ServerConfirmsDto = "ServerConfirmsDto",
     ServerSendsErrorMessageDto = "ServerSendsErrorMessageDto",
     StartGameRequestDto = "StartGameRequestDto",
     StartGameResponseDto = "StartGameResponseDto",
     QuestionDto = "QuestionDto",
+    PrepareForQuestionDto = "PrepareForQuestionDto",
+    QuestionTimeUpDto = "QuestionTimeUpDto",
 }
 

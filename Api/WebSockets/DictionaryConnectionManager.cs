@@ -1,12 +1,25 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Api.EventHandlers.Dtos;
+using EFScaffold;
 using Fleck;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using WebSocketBoilerplate;
 
 namespace Api.WebSockets;
 
-public class DictionaryConnectionManager(ILogger<DictionaryConnectionManager> logger) : IConnectionManager
+public class DictionaryConnectionManager : IConnectionManager
 {
+    private readonly ILogger<DictionaryConnectionManager> logger;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
+
+    public DictionaryConnectionManager(ILogger<DictionaryConnectionManager> logger, IServiceScopeFactory serviceScopeFactory)
+    {
+        this.logger = logger;
+        _serviceScopeFactory = serviceScopeFactory;
+    }
+
     public ConcurrentDictionary<string, HashSet<string>> TopicMembers { get; set; } = new();
     public ConcurrentDictionary<string, HashSet<string>> MemberTopics { get; set; } = new();
     public ConcurrentDictionary<string /* Client ID */, IWebSocketConnection> ConnectionIdToSocket { get; } = new();
@@ -103,10 +116,8 @@ public class DictionaryConnectionManager(ILogger<DictionaryConnectionManager> lo
         throw new Exception("Could not find client ID for socket ID " + socketId);
     }
 
-
     public async Task OnOpen(IWebSocketConnection socket, string clientId)
     {
-        
         if (string.IsNullOrEmpty(clientId))
         {
             clientId = Guid.NewGuid().ToString();
@@ -128,27 +139,176 @@ public class DictionaryConnectionManager(ILogger<DictionaryConnectionManager> lo
         await LogCurrentState();
     }
 
-    public async Task OnClose(IWebSocketConnection socket, string clientId)
+public async Task OnClose(IWebSocketConnection socket, string clientId)
+{
+    var socketId = socket.ConnectionInfo.Id.ToString();
+    logger.LogInformation($"OnClose triggered for connection: socket={socketId}, client={clientId}");
+
+    if (ConnectionIdToSocket.TryGetValue(clientId, out var currentSocket) &&
+        currentSocket.ConnectionInfo.Id.ToString() == socketId)
     {
-        var socketId = socket.ConnectionInfo.Id.ToString();
+        ConnectionIdToSocket.TryRemove(clientId, out _);
+        logger.LogInformation($"Removed connection for client {clientId}");
+    }
 
-        if (ConnectionIdToSocket.TryGetValue(clientId, out var currentSocket) &&
-            currentSocket.ConnectionInfo.Id.ToString() == socketId)
+    SocketToConnectionId.TryRemove(socketId, out _);
+
+    // Clean up database records
+    try
+    {
+        logger.LogInformation($"Cleaning up player record for clientId: {clientId}");
+        
+        // Create a new scope for database operations
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<KahootContext>();
+        
+        // Find the player by client ID
+        var player = await dbContext.Players.FindAsync(clientId);
+        if (player != null)
         {
-            ConnectionIdToSocket.TryRemove(clientId, out _);
-            logger.LogInformation($"Removed connection for client {clientId}");
-        }
-
-        SocketToConnectionId.TryRemove(socketId, out _);
-
-        if (MemberTopics.TryGetValue(clientId, out var topics))
-            foreach (var topic in topics)
+            string gameId = player.GameId;
+            string nickname = player.Nickname;
+            
+            logger.LogInformation($"Found player {nickname} (ID: {clientId}) in game {gameId}, removing from database");
+            
+            // Remove the player
+            dbContext.Players.Remove(player);
+            await dbContext.SaveChangesAsync();
+            
+            // Notify other players if in a game
+            if (!string.IsNullOrEmpty(gameId))
             {
-                await RemoveFromTopic(topic, clientId);
-                await BroadcastToTopic(topic, new MemberHasLeftDto { MemberId = clientId });
+                var remainingPlayers = await dbContext.Players
+                    .Where(p => p.GameId == gameId)
+                    .Select(p => new GamePlayerDto
+                    {
+                        Id = p.Id,
+                        Nickname = p.Nickname
+                    })
+                    .ToListAsync();
+                
+                var updateDto = new GamePlayersUpdateDto
+                {
+                    eventType = "GamePlayersUpdateDto",
+                    GameId = gameId,
+                    Players = remainingPlayers
+                };
+                
+                await BroadcastToTopic($"game:{gameId}", updateDto);
             }
+        }
+        else
+        {
+            logger.LogInformation($"No player found with ID: {clientId} - nothing to clean up");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, $"Error cleaning up player record for {clientId}");
+    }
 
-        MemberTopics.TryRemove(clientId, out _);
+    // Clean up topic memberships
+    if (MemberTopics.TryGetValue(clientId, out var topics))
+    {
+        foreach (var topic in topics)
+        {
+            await RemoveFromTopic(topic, clientId);
+            await BroadcastToTopic(topic, new MemberHasLeftDto { 
+                eventType = "MemberHasLeftDto", 
+                MemberId = clientId 
+            });
+        }
+    }
+
+    MemberTopics.TryRemove(clientId, out _);
+}
+
+    // Add new method to disconnect all players in a game
+    public async Task DisconnectAllPlayersInGame(string gameId)
+    {
+        logger.LogInformation($"Disconnecting all players in game: {gameId}");
+        
+        string gameTopic = $"game:{gameId}";
+        
+        // Get all member IDs in the game topic
+        if (!TopicMembers.TryGetValue(gameTopic, out var memberIds))
+        {
+            logger.LogWarning($"No members found in topic: {gameTopic}");
+            return;
+        }
+        
+        // Create a copy of the member IDs to avoid modification during iteration
+        var memberIdsCopy = memberIds.ToList();
+        
+        foreach (var memberId in memberIdsCopy)
+        {
+            logger.LogInformation($"Disconnecting player: {memberId}");
+            
+            // Remove player from all topics
+            if (MemberTopics.TryGetValue(memberId, out var topics))
+            {
+                foreach (var topic in topics)
+                {
+                    await RemoveFromTopic(topic, memberId);
+                }
+                MemberTopics.TryRemove(memberId, out _);
+            }
+            
+            // Remove socket connection
+            if (ConnectionIdToSocket.TryGetValue(memberId, out var socket))
+            {
+                var socketId = socket.ConnectionInfo.Id.ToString();
+                SocketToConnectionId.TryRemove(socketId, out _);
+                ConnectionIdToSocket.TryRemove(memberId, out _);
+                
+                // Force close the WebSocket connection
+                try {
+                    socket.Close();
+                }
+                catch (Exception ex) {
+                    logger.LogError(ex, $"Error closing socket for {memberId}");
+                }
+            }
+        }
+        
+        // Clean up the game topic itself
+        TopicMembers.TryRemove(gameTopic, out _);
+        
+        logger.LogInformation($"Disconnected all players in game: {gameId}");
+    }
+
+    private async Task BroadcastPlayerLeftUpdate(string gameId, string clientId)
+    {
+        if (string.IsNullOrEmpty(gameId)) return;
+        
+        using var scope = _serviceScopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<KahootContext>();
+        
+        try
+        {
+            var players = await dbContext.Players
+                .Where(p => p.GameId == gameId)
+                .Select(p => new GamePlayerDto
+                {
+                    Id = p.Id,
+                    Nickname = p.Nickname
+                })
+                .ToListAsync();
+
+            var updateDto = new GamePlayersUpdateDto
+            {
+                eventType = "GamePlayersUpdateDto",
+                GameId = gameId,
+                Players = players
+            };
+
+            string gameTopic = $"game:{gameId}";
+            await BroadcastToTopic(gameTopic, updateDto);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"Error broadcasting player left update for game {gameId}");
+        }
     }
 
     public async Task BroadcastToTopic<T>(string topic, T message) where T : BaseDto
@@ -160,7 +320,10 @@ public class DictionaryConnectionManager(ILogger<DictionaryConnectionManager> lo
             return;
         }
 
-        foreach (var memberId in members.ToList()) await BroadcastToMember(topic, memberId, message);
+        foreach (var memberId in members.ToList()) 
+        {
+            await BroadcastToMember(topic, memberId, message);
+        }
     }
 
     private async Task BroadcastToMember<T>(string topic, string memberId, T message) where T : BaseDto
@@ -178,7 +341,6 @@ public class DictionaryConnectionManager(ILogger<DictionaryConnectionManager> lo
             await RemoveFromTopic(topic, memberId);
             return;
         }
-
 
         socket.SendDto(message);
     }

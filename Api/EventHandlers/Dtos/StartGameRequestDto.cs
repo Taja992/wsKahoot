@@ -25,4 +25,14 @@ namespace Api.EventHandlers.Dtos
         public string OptionText { get; set; }
         public bool IsCorrect { get; set; }
     }
+
+    public class PrepareForQuestionDto : BaseDto
+    {
+        public int SecondsUntilQuestion { get; set; }
+    }
+
+    public class QuestionTimeUpDto : BaseDto
+    {
+        public string QuestionId { get; set; }
+    }
 }

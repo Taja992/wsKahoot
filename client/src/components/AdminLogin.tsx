@@ -1,6 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { StringConstants } from '../generated-client';
+import './AdminLogin.css';
 
 interface AdminLoginProps {
     onAdminLogin: (isAdmin: boolean) => void;
@@ -9,6 +10,7 @@ interface AdminLoginProps {
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onAdminLogin, sendRequest }) => {
     const [adminPassword, setAdminPassword] = useState("");
+    const [showAdminLogin, setShowAdminLogin] = useState(false);
 
     const handleAdminLogin = async () => {
         if (!adminPassword) {
@@ -28,6 +30,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onAdminLogin, sendReques
 
             if (response.isAdmin) {
                 onAdminLogin(true);
+                setAdminPassword("");
+                setShowAdminLogin(false);
                 toast.success("You are now the admin!");
             } else {
                 toast.error("Admin login failed: " + (response.message || "Invalid password"));
@@ -38,16 +42,42 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onAdminLogin, sendReques
         }
     };
 
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleAdminLogin();
+        }
+    };
+
     return (
-        <div className="admin-login">
-            <h2>Admin Login</h2>
-            <input
-                type="password"
-                placeholder="Enter admin password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-            />
-            <button onClick={handleAdminLogin}>Login as Admin</button>
+        <div className="admin-login-container">
+            {showAdminLogin ? (
+                <div className="admin-login">
+                    <input
+                        type="password"
+                        placeholder="Enter admin password"
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        autoFocus
+                    />
+                    <div className="admin-login-buttons">
+                        <button onClick={handleAdminLogin}>Login</button>
+                        <button 
+                            className="cancel-button"
+                            onClick={() => setShowAdminLogin(false)}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <button 
+                    className="admin-toggle-button"
+                    onClick={() => setShowAdminLogin(true)}
+                >
+                    Admin Login
+                </button>
+            )}
         </div>
     );
 };

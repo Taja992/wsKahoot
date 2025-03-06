@@ -33,6 +33,7 @@ public class Program
 
         builder.Services.AddSingleton<IGameTimeProvider, GameTimeProvider>();
         builder.Services.AddSingleton<IConnectionManager, DictionaryConnectionManager>();
+        
         builder.Services.AddSingleton<CustomWebSocketServer>();
 
 
